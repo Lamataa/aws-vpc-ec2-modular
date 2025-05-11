@@ -1,83 +1,55 @@
-# VPC
-resource "aws_vpc" "vpc" {
-    cidr_block           = "10.0.0.0/16"
-    enable_dns_hostnames = "true"
+module "vpc" {
+  source = "./modules/vpc"
 }
 
-# INTERNET GATEWAY
-resource "aws_internet_gateway" "igw" {
-    vpc_id = aws_vpc.vpc.id
+module "subnet" {
+  source = "./modules/subnet"
+  vpc_id = module.vpc.id  # Correção: module.vpc.id
 }
 
-# SUBNET
-resource "aws_subnet" "sn_public" {
-    vpc_id                  = aws_vpc.vpc.id
-    cidr_block              = "10.0.1.0/24"
-    map_public_ip_on_launch = "true"
-    availability_zone       = "us-east-1a"
-
+module "internet_gateway" {
+  source = "./modules/internet_gateway"
+  vpc_id = module.vpc.vpc_id  
 }
 
-# ROUTE TABLE
-resource "aws_route_table" "rt_public" {
-    vpc_id = aws_vpc.vpc.id
-
-    route {
-        cidr_block = "0.0.0.0/0"
-        gateway_id = aws_internet_gateway.igw.id
-    }
+module "route_table" {
+  source = "./modules/route_table"
+  vpc_id = module.vpc.vpc_id   
+  igw_id = module.internet_gateway.igw_id  
 }
 
-# SUBNET ASSOCIATION
-resource "aws_route_table_association" "rt_public_To_sn_public" {
-  subnet_id      = aws_subnet.sn_public.id
-  route_table_id = aws_route_table.rt_public.id
+module "security_group" {
+  source = "./modules/security_group"
+  vpc_id = module.vpc.id  # Correção: module.vpc.id
 }
 
-# SECURITY GROUP
-resource "aws_security_group" "sg_public" {
-    name        = "sg_public"
-    vpc_id      = aws_vpc.vpc.id
-    
-    egress {
-        from_port   = 0
-        to_port     = 0
-        protocol    = "-1"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-
-    ingress {
-        from_port   = 0
-        to_port     = 0
-        protocol    = "-1"
-        cidr_blocks = ["10.0.0.0/16"]
-    }
-
-    ingress {
-        from_port   = 22
-        to_port     = 22
-        protocol    = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-    
-    ingress {
-        from_port   = 80
-        to_port     = 80
-        protocol    = "tcp"
-        cidr_blocks = ["0.0.0.0/0"]
-    }
-
+module "ec2" {
+  source = "./modules/ec2"
+  subnet_id = module.subnet.subnet_id  
+  sg_id = module.security_group.sg_id  
 }
 
-# EC2 INSTANCE
-data "template_file" "user_data" {
-    template = "${file("./scripts/user_data.sh")}"
+output "vpc_id" {
+  value = module.vpc.vpc_id
+  description = "ID da VPC do módulo VPC"
 }
 
-resource "aws_instance" "instance" {
-    ami                    = "ami-0c101f26f147fa7fd"
-    instance_type          = "t2.micro"
-    subnet_id              = aws_subnet.sn_public.id
-    vpc_security_group_ids = [aws_security_group.sg_public.id]
-    user_data              = "${base64encode(data.template_file.user_data.rendered)}"
+output "subnet_id" {
+  value = module.subnet.subnet_id
+  description = "ID da Subnet do módulo Subnet"
+}
+
+output "sg_id" {
+  value = module.security_group.sg_id
+  description = "ID do Security Group do módulo Security Group"
+}
+
+output "instance_id" {
+  value = module.ec2.instance_id
+  description = "ID da Instância EC2 do módulo EC2"
+}
+
+output "route_table_id" {
+  value = module.route_table.route_table_id
+  description = "ID da Route Table do módulo Route Table"
 }
